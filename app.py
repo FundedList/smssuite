@@ -166,7 +166,7 @@ def send_sms(to_number, message_body, conversation_id=None):
                 'conversation_id': conversation_id,
                 'sender': 'user',
                 'body': message_body,
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': datetime.utcnow().isoformat() + 'Z' # Ensure Z for UTC
             }, room=str(conversation_id))
             # Emit to the user's personal room to update conversation list
             socketio.emit('conversation_update', {'user_id': current_user.id}, room=str(current_user.id))
@@ -491,7 +491,7 @@ def get_conversations():
             'id': conv.id,
             'contact_name': display_name,
             'last_message': last_message.body if last_message else 'No messages yet.',
-            'last_message_time': last_message.timestamp.isoformat() if last_message else None,
+            'last_message_time': (last_message.timestamp.isoformat() + 'Z') if last_message else None,
             'unread_count': unread_count
         })
     return jsonify(conversation_list)
@@ -509,7 +509,7 @@ def get_conversation_messages(conversation_id):
             'id': msg.id,
             'sender': msg.sender,
             'body': msg.body,
-            'timestamp': msg.timestamp.isoformat()
+            'timestamp': msg.timestamp.isoformat() + 'Z' # Ensure Z for UTC
         })
     return jsonify({'conversation_id': conversation.id, 'messages': message_list})
 
@@ -612,7 +612,7 @@ def twilio_webhook():
         'conversation_id': conversation.id,
         'sender': 'contact',
         'body': message_body,
-        'timestamp': datetime.utcnow().isoformat()
+        'timestamp': datetime.utcnow().isoformat() + 'Z' # Ensure Z for UTC
     }, room=str(conversation.id))
     socketio.emit('conversation_update', {'user_id': target_user.id}, room=str(target_user.id))
 

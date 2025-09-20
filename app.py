@@ -231,7 +231,7 @@ def callback():
     uri, headers, body = client.add_token(
         userinfo_endpoint
     )
-    userinfo_response = httpx.get(uri, headers=headers, data=body, verify=False)
+    userinfo_response = httpx.get(uri, headers=headers, verify=False)
 
     # You want to make sure the user is verified.
     if userinfo_response.json().get("email_verified"):

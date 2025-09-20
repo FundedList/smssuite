@@ -687,4 +687,9 @@ def send_bulk():
 if __name__ == '__main__':
     with app.app_context():
         db.create_all() # Create database tables within the application context
-    socketio.run(app, debug=True, ssl_context=('cert.pem', 'key.pem'))
+    # Use eventlet for Gunicorn deployment, remove ssl_context
+    # For local development, you might keep ssl_context
+    if os.environ.get("FLASK_ENV") == "production": # Example environment variable for production
+        socketio.run(app, host='0.0.0.0', port=int(os.environ.get("PORT", 5000)), debug=False, logger=True, engineio_logger=True)
+    else:
+        socketio.run(app, debug=True, ssl_context=('cert.pem', 'key.pem'), logger=True, engineio_logger=True)

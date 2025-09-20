@@ -1,3 +1,6 @@
+import eventlet # Add eventlet import
+eventlet.monkey_patch() # Must be at the very top!
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import os
 import json
@@ -179,7 +182,7 @@ def login():
         return redirect(url_for('index'))
 
     # Original Google OAuth redirect logic
-    google_provider_cfg = httpx.get(GOOGLE_DISCOVERY_URL, verify=False).json()
+    google_provider_cfg = httpx.get(GOOGLE_DISCOVERY_URL).json()
     authorization_endpoint = google_provider_cfg["authorization_endpoint"]
 
     request_uri = client.prepare_request_uri(
@@ -203,7 +206,7 @@ def callback():
 
     # Find out what URL to hit to get tokens that allow you to ask for
     # things on behalf of a user
-    google_provider_cfg = httpx.get(GOOGLE_DISCOVERY_URL, verify=False).json()
+    google_provider_cfg = httpx.get(GOOGLE_DISCOVERY_URL).json()
     token_endpoint = google_provider_cfg["token_endpoint"]
 
     # Prepare and send a request to get tokens!
@@ -218,7 +221,6 @@ def callback():
         headers=headers,
         data=body,
         auth=(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET),
-        verify=False
     )
 
     # Parse the tokens!
@@ -232,7 +234,7 @@ def callback():
     uri, headers, body = client.add_token(
         userinfo_endpoint
     )
-    userinfo_response = httpx.get(uri, headers=headers, verify=False)
+    userinfo_response = httpx.get(uri, headers=headers)
 
     # You want to make sure the user is verified.
     if userinfo_response.json().get("email_verified"):

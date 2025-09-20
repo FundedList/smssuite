@@ -688,8 +688,8 @@ if __name__ == '__main__':
     with app.app_context():
         db.create_all() # Create database tables within the application context
     # Use eventlet for Gunicorn deployment, remove ssl_context
-    # For local development, you might keep ssl_context
-    if os.environ.get("FLASK_ENV") == "production": # Example environment variable for production
-        socketio.run(app, host='0.0.0.0', port=int(os.environ.get("PORT", 5000)), debug=False, logger=True, engineio_logger=True)
+    if os.environ.get("FLASK_ENV") == "production": # Check for production environment
+        socketio.run(app, host='0.0.0.0', port=int(os.environ.get("PORT", 5000)), debug=False, logger=False, engineio_logger=False)
     else:
+        # Local development with HTTPS
         socketio.run(app, debug=True, ssl_context=('cert.pem', 'key.pem'), logger=True, engineio_logger=True)

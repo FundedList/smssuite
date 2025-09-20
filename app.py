@@ -177,7 +177,7 @@ def login():
         return redirect(url_for('index'))
 
     # Original Google OAuth redirect logic
-    google_provider_cfg = requests.get(GOOGLE_DISCOVERY_URL).json()
+    google_provider_cfg = requests.get(GOOGLE_DISCOVERY_URL, verify=False).json()
     authorization_endpoint = google_provider_cfg["authorization_endpoint"]
 
     request_uri = client.prepare_request_uri(
@@ -201,7 +201,7 @@ def callback():
 
     # Find out what URL to hit to get tokens that allow you to ask for
     # things on behalf of a user
-    google_provider_cfg = requests.get(GOOGLE_DISCOVERY_URL).json()
+    google_provider_cfg = requests.get(GOOGLE_DISCOVERY_URL, verify=False).json()
     token_endpoint = google_provider_cfg["token_endpoint"]
 
     # Prepare and send a request to get tokens!

@@ -42,6 +42,7 @@ login_manager.init_app(app)
 login_manager.login_view = 'login_page' # Changed to point to the new login route
 socketio = SocketIO(app, cors_allowed_origins="*", logger=False, engineio_logger=False) # Initialize SocketIO with logging
 
+print(f"SQLALCHEMY_DATABASE_URI: {app.config['SQLALCHEMY_DATABASE_URI']}") # Diagnostic print
 # User model for Flask-Login
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)

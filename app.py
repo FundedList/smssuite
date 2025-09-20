@@ -33,7 +33,7 @@ from twilio.twiml.messaging_response import MessagingResponse # Import for Twili
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.urandom(24) # Replace with a strong, random key in production
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///smssuite.db' # SQLite database
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL", 'sqlite:///smssuite.db') # Use DATABASE_URL for PostgreSQL on Render
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)

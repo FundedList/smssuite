@@ -1,0 +1,25 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+.env
+
+# lock files
+uv.lock
+
+# self signed certificates
+cert.pem
+key.pem
+
+# Google creds
+credentials.json
+token.json
+
+*.db
+instance/

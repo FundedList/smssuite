@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login to SMS Suite</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f4f4f4;
+        }
+        .login-container {
+            background-color: #fff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        .login-container h1 {
+            color: #007bff;
+            margin-bottom: 30px;
+        }
+        .google-login-button {
+            display: inline-flex;
+            align-items: center;
+            background-color: #4285F4;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: bold;
+            transition: background-color 0.3s ease;
+        }
+        .google-login-button:hover {
+            background-color: #357ae8;
+        }
+        .google-icon {
+            margin-right: 10px;
+            background-color: white;
+            padding: 8px;
+            border-radius: 3px;
+        }
+        .google-icon img {
+            width: 18px;
+            height: 18px;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>Welcome to SMS Suite</h1>
+        <p>Please log in with your Google account to continue.</p>
+        <a href="{{ url_for('login') }}" class="google-login-button">
+            <span class="google-icon"><img src="https://www.google.com/images/branding/googlelogo/svg/googlelogo_color_24dp.svg" alt="Google logo"></span>
+            Login with Google
+        </a>
+        {% if message %}
+        <p class="flash-message">{{ message }}</p>
+        {% endif %}
+    </div>
+</body>
+</html>

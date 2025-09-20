@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMS Suite</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.0/socket.io.js"></script> <!-- Socket.IO client library -->
+</head>
+<body>
+    <div class="header">
+        <h1>SMS Messaging Center</h1>
+        {% if current_user.is_authenticated %}
+            <p>Logged in as {{ current_user.name }} (<a href="{{ url_for('logout') }}">Logout</a>)</p>
+        {% endif %}
+    </div>
+    <div class="main-container">
+        <div class="left-pane">
+            <div class="pane-header">
+                <h2>Conversations</h2>
+                <button id="new-conversation-btn" type="button">+ New Conversation</button>
+            </div>
+            <div class="search-bar">
+                <input type="text" id="conversation-search" placeholder="Search conversations...">
+            </div>
+            <div class="conversation-list">
+                <!-- Conversation items will be loaded here by JavaScript -->
+                <div class="conversation-item active">
+                    <p class="contact-name">John Doe</p>
+                    <p class="last-message">Hello there!</p>
+                </div>
+                <div class="conversation-item">
+                    <p class="contact-name">Jane Smith</p>
+                    <p class="last-message">Are you free tomorrow?</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="middle-pane">
+            <div class="pane-header">
+                <h2>Selected Conversation</h2>
+            </div>
+            <div class="conversation-display">
+                <!-- Messages will be loaded here by JavaScript -->
+                <div class="message received">
+                    <p>Hello!</p>
+                    <span class="timestamp">10:00 AM</span>
+                </div>
+                <div class="message sent">
+                    <p>Hi there!</p>
+                    <span class="timestamp">10:01 AM</span>
+                </div>
+            </div>
+            <div class="message-input">
+                <textarea id="new-message" placeholder="Type your message..."></textarea>
+                <button id="send-message-btn" type="button">Send</button>
+            </div>
+        </div>
+
+        <div class="right-pane">
+            <div class="pane-header">
+                <h2>Google Sheets</h2>
+                <button id="new-bulk-message-btn" type="button">New Bulk Message</button>
+            </div>
+            <div class="google-sheet-selector">
+                <label for="sheet-select">Select a Google Sheet:</label>
+                <select id="sheet-select">
+                    <option value="">-- Select a sheet --</option>
+                    <!-- Options will be loaded here by JavaScript -->
+                </select>
+                <div class="sheet-preview">
+                    <h3>Sheet Preview</h3>
+                    <div id="sheet-data-preview">
+                        <!-- Sheet data will be loaded here -->
+                        <p>Select a sheet to see its preview.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bulk-message-composer" style="display:none;">
+                <h3>Compose Bulk Message</h3>
+                <label for="bulk-message-template">Message Template:</label>
+                <textarea id="bulk-message-template" rows="6" placeholder="Hi {{name}}, your appointment is at {{time}}."></textarea>
+                <button id="send-bulk-sms-btn" type="button">Send Bulk SMS</button>
+            </div>
+        </div>
+    </div>
+
+    {% if message %}
+    <p class="flash-message">{{ message }}</p>
+    {% endif %}
+
+    <script>
+        var currentUserId = "{{ current_user.id }}";
+    </script>
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

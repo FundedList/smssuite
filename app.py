@@ -33,6 +33,7 @@ import requests
 import httpx # Added httpx import
 
 from twilio.twiml.messaging_response import MessagingResponse # Import for Twilio webhook
+import tempfile # Added tempfile import
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.urandom(24) # Replace with a strong, random key in production
@@ -52,6 +53,8 @@ class User(UserMixin, db.Model):
     google_id = db.Column(db.String(100), unique=True, nullable=False)
     name = db.Column(db.String(100))
     email = db.Column(db.String(100))
+    google_api_refresh_token = db.Column(db.Text, nullable=True) # For user-specific Google API access
+    google_api_access_token = db.Column(db.Text, nullable=True) # For user-specific Google API access (short-lived)
 
 # Contact model
 class Contact(db.Model):
@@ -189,7 +192,8 @@ def login():
         authorization_endpoint,
         redirect_uri=request.base_url + "/callback",
         scope=SCOPES,
-        prompt="select_account"
+        prompt="consent", # Ensure we get a refresh token
+        access_type="offline" # Request offline access for refresh token
     )
     return redirect(request_uri)
 
@@ -242,6 +246,9 @@ def callback():
         users_email = userinfo_response.json()["email"]
         picture = userinfo_response.json()["picture"]
         users_name = userinfo_response.json()["given_name"]
+        # Extract tokens for future API access
+        refresh_token = client.refresh_token # The refresh token
+        access_token = client.token['access_token'] # The current access token
     else:
         return "User email not available or not verified by Google.", 400
 
@@ -252,10 +259,18 @@ def callback():
         user = User(
             google_id=unique_id,
             name=users_name,
-            email=users_email
+            email=users_email,
+            google_api_refresh_token=refresh_token,
+            google_api_access_token=access_token
         )
         db.session.add(user)
-        db.session.commit()
+    else:
+        # Update existing user's tokens
+        user.name = users_name
+        user.email = users_email
+        user.google_api_refresh_token = refresh_token
+        user.google_api_access_token = access_token
+    db.session.commit()
 
     # Log user in
     login_user(user)
@@ -271,25 +286,34 @@ def logout():
 
 # Helper to get the Google Sheets service
 def get_google_sheet_service():
-    creds = None
-    # The file token.json stores the user's access and refresh tokens, and is
-    # created automatically when the authorization flow completes for the first
-    # time.
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    # If there are no (valid) credentials available, let the user log in.
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+    # For multi-user access, use current_user's stored tokens
+    if not current_user.is_authenticated or not current_user.google_api_refresh_token:
+        print("Error: Current user not authenticated or no Google API refresh token found.")
+        return None
+
+    creds = Credentials(
+        token=current_user.google_api_access_token,
+        refresh_token=current_user.google_api_refresh_token,
+        client_id=os.environ.get("GOOGLE_CLIENT_ID"),
+        client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
+        token_uri="https://oauth2.googleapis.com/token",
+        scopes=SCOPES
+    )
+
+    if creds.expired and creds.refresh_token:
+        try:
             creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0, access_type='offline', prompt='consent')
-        # Save the credentials for the next run
-        print("Attempting to save token.json for Sheets service...")
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-        print("token.json saved successfully for Sheets service.")
+            # Update the stored access token in the database
+            current_user.google_api_access_token = creds.token
+            db.session.commit()
+        except Exception as e:
+            print(f"Error refreshing Google API access token for Sheets: {e}")
+            return None
+
+    if not creds.valid:
+        print("Error: Google API credentials are not valid after refresh attempt for Sheets.")
+        return None
+
     try:
         service = build('sheets', 'v4', credentials=creds)
         return service
@@ -297,21 +321,36 @@ def get_google_sheet_service():
         print(f"Error building Google Sheets service: {e}")
         return None
 
+
+
 def get_google_drive_service():
-    creds = None
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
+    # For multi-user access, use current_user's stored tokens
+    if not current_user.is_authenticated or not current_user.google_api_refresh_token:
+        print("Error: Current user not authenticated or no Google API refresh token found.")
+        return None
+
+    creds = Credentials(
+        token=current_user.google_api_access_token,
+        refresh_token=current_user.google_api_refresh_token,
+        client_id=os.environ.get("GOOGLE_CLIENT_ID"),
+        client_secret=os.environ.get("GOOGLE_CLIENT_SECRET"),
+        token_uri="https://oauth2.googleapis.com/token",
+        scopes=SCOPES
+    )
+
+    if creds.expired and creds.refresh_token:
+        try:
             creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0, access_type='offline', prompt='consent')
-        print("Attempting to save token.json for Drive service...")
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
-        print("token.json saved successfully for Drive service.")
+            # Update the stored access token in the database
+            current_user.google_api_access_token = creds.token
+            db.session.commit()
+        except Exception as e:
+            print(f"Error refreshing Google API access token for Drive: {e}")
+            return None
+
+    if not creds.valid:
+        print("Error: Google API credentials are not valid after refresh attempt for Drive.")
+        return None
     try:
         service = build('drive', 'v3', credentials=creds)
         return service

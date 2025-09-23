@@ -778,6 +778,8 @@ def configure_twilio():
     auth_token = data.get('auth_token')
     phone_number = data.get('phone_number')
 
+    print(f"Received Twilio config: SID={account_sid[:5]}***, Token={auth_token[:5]}***, Phone={phone_number}") # Log redacted credentials
+
     if not account_sid or not auth_token or not phone_number:
         return jsonify({'error': 'All Twilio fields are required.'}), 400
 
@@ -796,6 +798,7 @@ def configure_twilio():
         current_user.twilio_auth_token = auth_token
         current_user.twilio_phone_number = formatted_phone_number
         db.session.commit()
+        print(f"Successfully committed Twilio credentials for user {current_user.id}.")
         return jsonify({'message': 'Twilio credentials saved successfully!'}), 200
     except Exception as e:
         db.session.rollback()

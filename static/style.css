@@ -251,3 +251,82 @@ button:hover {
     white-space: nowrap;
     z-index: 1000;
 }
+
+/* Settings Page Specific Styles */
+.settings-container {
+    max-width: 800px;
+    margin: 40px auto;
+    padding: 30px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.settings-container h1 {
+    color: #007bff;
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.settings-section {
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #eee;
+}
+
+.settings-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.settings-section h2 {
+    color: #007bff;
+    font-size: 22px;
+    margin-bottom: 15px;
+}
+
+.settings-section p {
+    font-size: 16px;
+    line-height: 1.6;
+}
+
+#twilio-settings-form .form-group {
+    margin-bottom: 15px;
+}
+
+#twilio-settings-form label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+#twilio-settings-form input[type="text"] {
+    width: calc(100% - 20px); /* Account for padding */
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-size: 16px;
+}
+
+#twilio-settings-form button[type="submit"] {
+    background-color: #28a745; /* Green for save action */
+    color: white;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s ease;
+}
+
+#twilio-settings-form button[type="submit"]:hover {
+    background-color: #218838;
+}
+
+.feedback-message {
+    margin-top: 15px;
+    font-weight: bold;
+    text-align: center;
+}

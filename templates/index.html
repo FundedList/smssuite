@@ -11,7 +11,7 @@
     <div class="header">
         <h1>SMS Messaging Center</h1>
         {% if current_user.is_authenticated %}
-            <p>Logged in as {{ current_user.name }} (<a href="{{ url_for('logout') }}">Logout</a>)</p>
+            <p>Logged in as {{ current_user.name }} (<a href="{{ url_for('logout') }}">Logout</a>) | <a href="{{ url_for('settings_page') }}">Settings</a></p>
         {% endif %}
     </div>
     <div class="main-container">

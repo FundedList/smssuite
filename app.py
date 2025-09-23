@@ -55,6 +55,9 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(100))
     google_api_refresh_token = db.Column(db.Text, nullable=True) # For user-specific Google API access
     google_api_access_token = db.Column(db.Text, nullable=True) # For user-specific Google API access (short-lived)
+    twilio_account_sid = db.Column(db.String(100), nullable=True)
+    twilio_auth_token = db.Column(db.String(100), nullable=True)
+    twilio_phone_number = db.Column(db.String(20), nullable=True, unique=True)
 
 # Contact model
 class Contact(db.Model):
@@ -95,9 +98,9 @@ GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", 'YOUR_GOOGLE_SHEET_ID') # TO
 GOOGLE_SHEET_RANGE = os.environ.get("GOOGLE_SHEET_RANGE", 'Sheet1!A:C') # TODO: Adjust range as needed (e.g., Name, Phone, Group)
 
 # Twilio Configuration
-TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", None) # TODO: Replace with your actual Twilio Account SID
-TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", None) # TODO: Replace with your actual Twilio Auth Token
-TWILIO_PHONE_NUMBER = os.environ.get("TWILIO_PHONE_NUMBER", None) # TODO: Replace with your actual Twilio Phone Number
+# TWILIO_ACCOUNT_SID = os.environ.get("TWILIO_ACCOUNT_SID", None) # TODO: Replace with your actual Twilio Account SID
+# TWILIO_AUTH_TOKEN = os.environ.get("TWILIO_AUTH_TOKEN", None) # TODO: Replace with your actual Twilio Auth Token
+# TWILIO_PHONE_NUMBER = os.environ.get("TWILIO_PHONE_NUMBER", None) # TODO: Replace with your actual Twilio Phone Number
 
 # Google OAuth Configuration
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", None)
@@ -146,11 +149,20 @@ def get_or_create_contact_and_conversation(phone_number, user_id, contact_name="
     return contact, conversation
 
 def send_sms(to_number, message_body, conversation_id=None):
+    # Use current_user's Twilio credentials
+    if not current_user.is_authenticated or \
+       not current_user.twilio_account_sid or \
+       not current_user.twilio_auth_token or \
+       not current_user.twilio_phone_number:
+        error_message = "Twilio credentials not configured for your account. Please go to Settings to configure."
+        print(f"Error sending SMS: {error_message}")
+        return False, error_message
+
     try:
-        client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+        client = Client(current_user.twilio_account_sid, current_user.twilio_auth_token)
         message = client.messages.create(
             to=format_phone_number_e164(to_number),
-            from_=TWILIO_PHONE_NUMBER,
+            from_=current_user.twilio_phone_number,
             body=message_body
         )
         print(f"Message SID: {message.sid}")
@@ -626,17 +638,38 @@ def twilio_webhook():
     if not from_number or not message_body:
         return 'Invalid Twilio request', 400
 
-    # Find the user whose Twilio number matches the `to_number`
-    # This assumes TWILIO_PHONE_NUMBER is unique per user or handled appropriately
-    # For simplicity, we'll assume a single user for now or fetch by configuration
-    # In a multi-user setup, you'd map `to_number` to a `user_id`
-    # For this example, let's assume the first user in the DB (or a specific config)
-    target_user = User.query.filter_by(google_id=os.environ.get("ADMIN_GOOGLE_ID")).first() # Assuming an admin user for incoming messages
-    if not target_user:
-        print("No target user found for incoming message.")
-        return '<Response/>', 200 # Respond to Twilio without error
+    formatted_from_number = format_phone_number_e164(from_number)
+    formatted_to_number = format_phone_number_e164(to_number)
 
-    contact, conversation = get_or_create_contact_and_conversation(from_number, target_user.id)
+    target_user = None
+    conversation = None
+
+    # Priority 1: Find an existing conversation for this contact number
+    # This ensures replies go to the user who initiated the conversation
+    conversation = Conversation.query.join(Contact).filter(
+        Contact.phone_number == formatted_from_number
+    ).order_by(Conversation.start_time.desc()).first()
+
+    if conversation:
+        target_user = User.query.get(conversation.user_id)
+    else:
+        # Priority 2: If no conversation, find a user whose Twilio number matches the `to_number`
+        # This routes unsolicited messages to the user who owns the Twilio number
+        print(f"No existing conversation found for {formatted_from_number}. Looking for user with Twilio number: {formatted_to_number}")
+        target_user = User.query.filter_by(twilio_phone_number=formatted_to_number).first()
+
+    if not target_user:
+        # Fallback: If still no target user (e.g., Twilio number not configured or unroutable)
+        print("No target user found for incoming message. Falling back to ADMIN_GOOGLE_ID if configured.")
+        target_user = User.query.filter_by(google_id=os.environ.get("ADMIN_GOOGLE_ID")).first()
+
+    if not target_user:
+        print("Error: No target user identified for incoming message. Message will not be processed.")
+        return '<Response/>', 200 # Respond to Twilio gracefully if no user can be found
+
+    # Now that we have a target_user, get or create the contact and conversation for them
+    # The conversation might have been found above, or it needs to be created for unsolicited messages
+    contact, conversation = get_or_create_contact_and_conversation(formatted_from_number, target_user.id)
 
     incoming_message = Message(
         conversation_id=conversation.id,
@@ -727,6 +760,47 @@ def send_bulk():
         results.append(f"To {contact['name']} ({contact['phone']}): {feedback_message}") # Use Name if available
     
     return render_template('index.html', message='\n'.join(results))
+
+@app.route('/settings')
+@login_required
+def settings_page():
+    return render_template('settings.html',
+                           email=current_user.email,
+                           twilio_account_sid=current_user.twilio_account_sid,
+                           twilio_auth_token=current_user.twilio_auth_token,
+                           twilio_phone_number=current_user.twilio_phone_number)
+
+@app.route('/api/configure_twilio', methods=['POST'])
+@login_required
+def configure_twilio():
+    data = request.get_json()
+    account_sid = data.get('account_sid')
+    auth_token = data.get('auth_token')
+    phone_number = data.get('phone_number')
+
+    if not account_sid or not auth_token or not phone_number:
+        return jsonify({'error': 'All Twilio fields are required.'}), 400
+
+    # Validate phone number format (optional, but good practice)
+    formatted_phone_number = format_phone_number_e164(phone_number)
+    if not formatted_phone_number:
+        return jsonify({'error': 'Invalid Twilio phone number format.'}), 400
+
+    # Check if the Twilio phone number is already registered by another user
+    existing_user_with_phone = User.query.filter_by(twilio_phone_number=formatted_phone_number).first()
+    if existing_user_with_phone and existing_user_with_phone.id != current_user.id:
+        return jsonify({'error': 'This Twilio phone number is already associated with another account.'}), 409 # Conflict
+
+    try:
+        current_user.twilio_account_sid = account_sid
+        current_user.twilio_auth_token = auth_token
+        current_user.twilio_phone_number = formatted_phone_number
+        db.session.commit()
+        return jsonify({'message': 'Twilio credentials saved successfully!'}), 200
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error saving Twilio credentials: {e}")
+        return jsonify({'error': f'Error saving Twilio credentials: {e}'}), 500
 
 if __name__ == '__main__':
     with app.app_context():

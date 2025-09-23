@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - SMS Suite</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="header">
+        <h1>Settings</h1>
+        <p><a href="{{ url_for('index') }}">Back to Messaging</a></p>
+    </div>
+    <div class="main-container settings-container">
+        <div class="settings-section">
+            <h2>Google Account</h2>
+            <p><strong>Connected Email:</strong> {{ email }}</p>
+        </div>
+
+        <div class="settings-section">
+            <h2>Twilio Credentials</h2>
+            <form id="twilio-settings-form">
+                <div class="form-group">
+                    <label for="account_sid">Account SID:</label>
+                    <input type="text" id="account_sid" name="account_sid" value="{{ twilio_account_sid if twilio_account_sid else '' }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="auth_token">Auth Token:</label>
+                    <input type="text" id="auth_token" name="auth_token" value="{{ twilio_auth_token if twilio_auth_token else '' }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="phone_number">Twilio Phone Number (E.164 format, e.g., +12345678900):</label>
+                    <input type="text" id="phone_number" name="phone_number" value="{{ twilio_phone_number if twilio_phone_number else '' }}" required>
+                </div>
+                <button type="submit">Save Twilio Settings</button>
+                <p id="twilio-feedback" class="feedback-message"></p>
+            </form>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

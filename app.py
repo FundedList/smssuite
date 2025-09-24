@@ -386,7 +386,9 @@ def list_google_sheets():
             
         results = drive_service.files().list(
             q=q_param,
-            fields="files(id, name)"
+            fields="files(id, name)",
+            supportsAllDrives=True, # Added to support Shared Drives
+            includeItemsFromAllDrives=True # Added to include items from Shared Drives
         ).execute()
         sheets = results.get('files', [])
         return jsonify(sheets)

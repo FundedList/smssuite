@@ -1,7 +1,19 @@
 // This file will contain JavaScript for frontend interactions.
 
+// Debounce function to limit how often a function is called
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+}
+
 document.addEventListener('DOMContentLoaded', function() {
-    const sheetSelect = document.getElementById('sheet-select');
+    // Correctly reference the Google Sheet elements
+    const googleSheetSelect = document.getElementById('googleSheetSelect');
+    const sheetSearchInput = document.getElementById('sheetSearchInput');
     const sheetDataPreview = document.getElementById('sheet-data-preview');
     const newBulkMessageBtn = document.getElementById('new-bulk-message-btn');
     const bulkMessageComposer = document.querySelector('.bulk-message-composer');
@@ -60,23 +72,25 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Function to fetch and populate Google Sheets
-    async function fetchGoogleSheets() {
+    async function fetchGoogleSheets(searchQuery = '') {
+        console.log("Fetching Google Sheets...");
         try {
-            const response = await fetch('/google_sheets');
+            const url = searchQuery ? `/google_sheets?search=${encodeURIComponent(searchQuery)}` : '/google_sheets';
+            const response = await fetch(url);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const sheets = await response.json();
-            
-            sheetSelect.innerHTML = '<option value="">-- Select a sheet --</option>';
+            console.log("Sheets fetched:", sheets);
+            googleSheetSelect.innerHTML = '<option value="">Select a Google Sheet</option>';
             sheets.forEach(sheet => {
                 const option = document.createElement('option');
                 option.value = sheet.id;
                 option.textContent = sheet.name;
-                sheetSelect.appendChild(option);
+                googleSheetSelect.appendChild(option);
             });
         } catch (error) {
-            console.error('Error fetching Google Sheets:', error);
+            console.error("Error fetching Google Sheets:", error);
             sheetDataPreview.innerHTML = '<p style="color: red;">Error loading sheets.</p>';
         }
     }
@@ -227,16 +241,25 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Event Listeners
-    sheetSelect.addEventListener('change', function() {
-        fetchSheetData(this.value);
-    });
+    if (googleSheetSelect) {
+        googleSheetSelect.addEventListener('change', function() {
+            fetchSheetData(this.value);
+        });
+    }
+
+    if (sheetSearchInput) {
+        sheetSearchInput.addEventListener('input', debounce(function() {
+            const query = sheetSearchInput.value;
+            fetchGoogleSheets(query);
+        }, 300)); // Debounce to avoid excessive API calls
+    }
 
     newBulkMessageBtn.addEventListener('click', function() {
         bulkMessageComposer.style.display = 'block';
     });
 
     sendBulkSmsBtn.addEventListener('click', async function() {
-        const sheetId = sheetSelect.value;
+        const sheetId = googleSheetSelect.value;
         const messageTemplate = bulkMessageTemplate.value;
 
         if (!sheetId) {

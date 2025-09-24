@@ -379,8 +379,13 @@ def list_google_sheets():
         return jsonify({'error': 'Could not get Google Drive service.'}), 500
     
     try:
+        search_query = request.args.get('search', '')
+        q_param = "mimeType='application/vnd.google-apps.spreadsheet'"
+        if search_query:
+            q_param += f" and name contains '{search_query}'"
+            
         results = drive_service.files().list(
-            q="mimeType='application/vnd.google-apps.spreadsheet'",
+            q=q_param,
             fields="files(id, name)"
         ).execute()
         sheets = results.get('files', [])

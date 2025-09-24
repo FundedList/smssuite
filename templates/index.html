@@ -62,18 +62,17 @@
                 <h2>Google Sheets</h2>
                 <button id="new-bulk-message-btn" type="button">New Bulk Message</button>
             </div>
-            <div class="google-sheet-selector">
-                <label for="sheet-select">Select a Google Sheet:</label>
-                <select id="sheet-select">
-                    <option value="">-- Select a sheet --</option>
-                    <!-- Options will be loaded here by JavaScript -->
+            <div class="google-sheet-selector-container">
+                <input type="text" id="sheetSearchInput" placeholder="Search sheets by name..." class="search-input">
+                <select id="googleSheetSelect">
+                    <option value="">Select a Google Sheet</option>
                 </select>
-                <div class="sheet-preview">
-                    <h3>Sheet Preview</h3>
-                    <div id="sheet-data-preview">
-                        <!-- Sheet data will be loaded here -->
-                        <p>Select a sheet to see its preview.</p>
-                    </div>
+            </div>
+            <div id="sheetPreview" class="sheet-preview">
+                <h3>Sheet Preview</h3>
+                <div id="sheet-data-preview">
+                    <!-- Sheet data will be loaded here -->
+                    <p>Select a sheet to see its preview.</p>
                 </div>
             </div>
             <div class="bulk-message-composer" style="display:none;">

@@ -836,11 +836,13 @@ def trigger_twilio_history_import():
     
     # In a real application, this would be a long-running task, possibly in a background job.
     # For simplicity, we'll run it synchronously for now.
-    success, message = import_twilio_history_for_user(current_user)
-    if success:
-        return jsonify({'message': message}), 200
-    else:
-        return jsonify({'error': message}), 500
+    # success, message = import_twilio_history_for_user(current_user)
+    
+    # Run the import in a separate greenlet to avoid blocking the main event loop
+    eventlet.spawn(import_twilio_history_for_user, current_user._get_current_object())
+    
+    # Return immediately, the import will proceed in the background
+    return jsonify({'message': 'Twilio history import initiated in the background. Check server logs for progress.'}), 202 # 202 Accepted for background processing
 
 def import_twilio_history_for_user(user):
     print(f"Starting Twilio history import for user {user.id} ({user.email})...")

@@ -861,13 +861,22 @@ def import_twilio_history_for_user(user):
         # Let's simplify for now: fetch all messages for the account and filter by the user's Twilio number
         all_messages = client.messages.list()
         
+        print(f"Fetched {len(all_messages)} total messages from Twilio account.")
+        
         imported_count = 0
         for message_record in all_messages:
-            # Check if the message is relevant to the current user's Twilio number
-            is_from_user_twilio = (format_phone_number_e164(message_record.from_) == user.twilio_phone_number)
-            is_to_user_twilio = (format_phone_number_e164(message_record.to) == user.twilio_phone_number)
+            # Normalize Twilio message numbers to E.164 for reliable comparison
+            twilio_from_e164 = format_phone_number_e164(message_record.from_)
+            twilio_to_e164 = format_phone_number_e164(message_record.to)
+            
+            print(f"  Processing Twilio message SID: {message_record.sid}, From: {twilio_from_e164}, To: {twilio_to_e164}")
+            print(f"  User's Twilio number (E.164): {user.twilio_phone_number}")
+
+            is_from_user_twilio = (twilio_from_e164 == user.twilio_phone_number)
+            is_to_user_twilio = (twilio_to_e164 == user.twilio_phone_number)
             
             if not (is_from_user_twilio or is_to_user_twilio):
+                print(f"  Skipping message {message_record.sid}: not relevant to user's Twilio number.")
                 continue # Skip messages not involving this user's Twilio number
 
             # Determine sender and recipient in the context of our app

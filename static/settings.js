@@ -1,6 +1,17 @@
+function debounce(func, delay) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), delay);
+    };
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     const twilioSettingsForm = document.getElementById('twilio-settings-form');
     const twilioFeedback = document.getElementById('twilio-feedback');
+    const importTwilioHistoryBtn = document.getElementById('import-twilio-history-btn');
+    const importHistoryFeedback = document.getElementById('import-history-feedback');
 
     if (twilioSettingsForm) {
         twilioSettingsForm.addEventListener('submit', async function(event) {
@@ -26,6 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (response.ok) {
                     twilioFeedback.style.color = 'green';
                     twilioFeedback.textContent = result.message;
+                    // Optionally, trigger a refresh of other parts of the UI if needed
                 } else {
                     twilioFeedback.style.color = 'red';
                     twilioFeedback.textContent = result.error;
@@ -34,6 +46,38 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Error saving Twilio settings:', error);
                 twilioFeedback.style.color = 'red';
                 twilioFeedback.textContent = 'An unexpected error occurred.';
+            }
+        });
+    }
+
+    if (importTwilioHistoryBtn) {
+        importTwilioHistoryBtn.addEventListener('click', async function() {
+            if (!confirm("Importing historical data may take a while and could potentially create new conversations. Do you want to proceed?")) {
+                return;
+            }
+            importHistoryFeedback.textContent = '';
+            importHistoryFeedback.style.color = 'black';
+            importHistoryFeedback.textContent = 'Importing... This may take a while.';
+            
+            try {
+                const response = await fetch('/api/import_twilio_history', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    importHistoryFeedback.style.color = 'green';
+                    importHistoryFeedback.textContent = result.message;
+                } else {
+                    importHistoryFeedback.style.color = 'red';
+                    importHistoryFeedback.textContent = result.error;
+                }
+            } catch (error) {
+                console.error('Error importing Twilio history:', error);
+                importHistoryFeedback.style.color = 'red';
+                importHistoryFeedback.textContent = 'An unexpected error occurred during import.';
             }
         });
     }

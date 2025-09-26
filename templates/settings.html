@@ -36,6 +36,13 @@
                 <p id="twilio-feedback" class="feedback-message"></p>
             </form>
         </div>
+
+        <div class="settings-section">
+            <h2>Import Data</h2>
+            <p>Import your historical SMS conversations from Twilio. This may take a while depending on the number of messages.</p>
+            <button id="import-twilio-history-btn">Import Twilio History</button>
+            <p id="import-history-feedback" class="feedback-message"></p>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='settings.js') }}"></script>

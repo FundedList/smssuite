@@ -75,6 +75,7 @@ class Conversation(db.Model):
     contact_id = db.Column(db.Integer, db.ForeignKey('contact.id'), nullable=False)
     start_time = db.Column(db.DateTime, default=datetime.utcnow)
     last_read_timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=True) # New field
+    last_activity_time = db.Column(db.DateTime, default=datetime.utcnow, nullable=False) # New field
 
     # Relationships
     contact = db.relationship('Contact', backref=db.backref('conversations', lazy=True), lazy=True)
@@ -174,6 +175,8 @@ def send_sms(to_number, message_body, conversation_id=None):
                 body=message_body
             )
             db.session.add(new_message)
+            conversation = Conversation.query.get(conversation_id)
+            conversation.last_activity_time = datetime.utcnow() # Update last activity time
             db.session.commit()
             # Emit SocketIO event after message is committed to DB
             # Emit to the specific conversation room
@@ -521,7 +524,7 @@ def _get_contact_name_from_row_data(row_data, headers):
 @login_required
 def get_conversations():
     user_id = current_user.id
-    conversations = Conversation.query.filter_by(user_id=user_id).order_by(Conversation.start_time.desc()).all()
+    conversations = Conversation.query.filter_by(user_id=user_id).order_by(Conversation.last_activity_time.desc()).all()
     
     conversation_list = []
     for conv in conversations:
@@ -684,6 +687,7 @@ def twilio_webhook():
         body=message_body
     )
     db.session.add(incoming_message)
+    conversation.last_activity_time = datetime.utcnow() # Update last activity time
     db.session.commit()
     
     # Emit SocketIO event for real-time update
@@ -821,3 +825,105 @@ if __name__ == '__main__':
     else:
         # Local development with HTTPS
         socketio.run(app, debug=True, ssl_context=('cert.pem', 'key.pem'), logger=True, engineio_logger=True)
+
+@app.route('/api/import_twilio_history', methods=['POST'])
+@login_required
+def trigger_twilio_history_import():
+    if not current_user.twilio_account_sid or \
+       not current_user.twilio_auth_token or \
+       not current_user.twilio_phone_number:
+        return jsonify({'error': 'Twilio credentials not configured for your account.'}), 400
+    
+    # In a real application, this would be a long-running task, possibly in a background job.
+    # For simplicity, we'll run it synchronously for now.
+    success, message = import_twilio_history_for_user(current_user)
+    if success:
+        return jsonify({'message': message}), 200
+    else:
+        return jsonify({'error': message}), 500
+
+def import_twilio_history_for_user(user):
+    print(f"Starting Twilio history import for user {user.id} ({user.email})...")
+    # TODO: Implement actual Twilio API calls and database insertion here
+    try:
+        client = Client(user.twilio_account_sid, user.twilio_auth_token)
+        # Fetch messages
+        # messages = client.messages.list(to=user.twilio_phone_number, limit=100) # Example: fetch messages sent to user's Twilio number
+        # messages = client.messages.list(from_=user.twilio_phone_number, limit=100) # Example: fetch messages sent from user's Twilio number
+        
+        # To get all messages (sent and received) related to the user's Twilio number,
+        # we'll fetch messages where the user's Twilio number is either 'from' or 'to'.
+        # This might require two separate queries and merging/deduplicating, or iterating more broadly.
+        
+        # A more robust approach would be to iterate through all messages in the account
+        # and filter them by the user's Twilio number.
+        
+        # Let's simplify for now: fetch all messages for the account and filter by the user's Twilio number
+        all_messages = client.messages.list()
+        
+        imported_count = 0
+        for message_record in all_messages:
+            # Check if the message is relevant to the current user's Twilio number
+            is_from_user_twilio = (format_phone_number_e164(message_record.from_) == user.twilio_phone_number)
+            is_to_user_twilio = (format_phone_number_e164(message_record.to) == user.twilio_phone_number)
+            
+            if not (is_from_user_twilio or is_to_user_twilio):
+                continue # Skip messages not involving this user's Twilio number
+
+            # Determine sender and recipient in the context of our app
+            if is_from_user_twilio: # User sent the message
+                app_sender = 'user'
+                contact_phone = message_record.to
+            else: # User received the message
+                app_sender = 'contact'
+                contact_phone = message_record.from_
+            
+            # Skip if contact_phone is the user's own Twilio number (e.g., messages to self)
+            if format_phone_number_e164(contact_phone) == user.twilio_phone_number:
+                continue
+
+            # Convert Twilio timestamp to datetime object
+            # Twilio timestamp is typically in RFC 2822 format or similar, can be parsed by datetime.fromisoformat
+            # Example: 'Thu, 24 Sep 2025 10:00:00 +0000'
+            # Twilio's date_sent is a datetime object directly
+            message_timestamp = message_record.date_sent
+
+            # Get or create contact and conversation
+            contact, conversation = get_or_create_contact_and_conversation(contact_phone, user.id)
+
+            # Check for existing message to avoid duplicates
+            existing_message = Message.query.filter_by(
+                conversation_id=conversation.id,
+                sender=app_sender,
+                body=message_record.body,
+                timestamp=message_timestamp # Exact timestamp match
+            ).first()
+            
+            if existing_message:
+                # print(f"Skipping duplicate message: {message_record.sid}")
+                continue # Skip if message already exists
+
+            new_message = Message(
+                conversation_id=conversation.id,
+                sender=app_sender,
+                body=message_record.body,
+                timestamp=message_timestamp
+            )
+            db.session.add(new_message)
+
+            # Update conversation's last_activity_time if this message is more recent
+            if conversation.last_activity_time is None or new_message.timestamp > conversation.last_activity_time:
+                conversation.last_activity_time = new_message.timestamp
+                
+            imported_count += 1
+            # print(f"Imported message: {message_record.sid}")
+        
+        db.session.commit()
+        print(f"Successfully imported {imported_count} messages for user {user.id}.")
+        # Emit a global update or a user-specific update to refresh UI
+        socketio.emit('conversation_update', {'user_id': user.id}, room=str(user.id))
+        return True, f"Successfully imported {imported_count} historical Twilio messages."
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error importing Twilio history for user {user.id}: {e}")
+        return False, f"Error importing Twilio history: {e}"

@@ -886,7 +886,8 @@ def import_twilio_history_for_user(user):
             # Twilio timestamp is typically in RFC 2822 format or similar, can be parsed by datetime.fromisoformat
             # Example: 'Thu, 24 Sep 2025 10:00:00 +0000'
             # Twilio's date_sent is a datetime object directly
-            message_timestamp = message_record.date_sent
+            # Convert it to timezone-naive UTC for consistency with database entries
+            message_timestamp = message_record.date_sent.replace(tzinfo=None)
 
             # Get or create contact and conversation
             contact, conversation = get_or_create_contact_and_conversation(contact_phone, user.id)

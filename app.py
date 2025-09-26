@@ -530,6 +530,11 @@ def get_conversations():
     
     conversation_list = []
     for conv in conversations:
+        print(f"Processing Conversation ID: {conv.id}")
+        print(f"  Contact Name (raw): {conv.contact.name if conv.contact else 'No Contact Object'}")
+        print(f"  Contact Phone (raw): {conv.contact.phone_number if conv.contact else 'No Contact Object'}")
+        print(f"  Last Activity Time (raw): {conv.last_activity_time}")
+
         last_message_timestamp_str = None
         last_message_body = '' # Default to empty string for preview
 
@@ -542,10 +547,13 @@ def get_conversations():
                 db.session.add(conv) # Mark for update
             last_message_timestamp_str = last_message_record.timestamp.isoformat() + 'Z'
             last_message_body = last_message_record.body
+            print(f"  Last Message Record Timestamp: {last_message_record.timestamp}")
+            print(f"  Last Message Record Body: {last_message_record.body[:30]}...") # Truncate for log readability
         # else: if no messages, last_message_timestamp_str and last_message_body remain defaults
 
         # Ensure contact name is displayed as phone number if not available
-        display_contact_name = conv.contact.name if conv.contact and conv.contact.name else format_phone_number_e164(conv.contact.phone_number)
+        display_contact_name = conv.contact.name if conv.contact and conv.contact.name else (format_phone_number_e164(conv.contact.phone_number) if conv.contact and conv.contact.phone_number else 'Unknown Contact/Phone')
+        print(f"  Display Contact Name (processed): {display_contact_name}")
 
         unread_count = 0
         if conv.last_read_timestamp:
@@ -560,11 +568,13 @@ def get_conversations():
                 Message.conversation_id == conv.id,
                 Message.sender == 'contact'
             ).count()
+        print(f"  Unread Count: {unread_count}")
+        print("----------------------------------------")
 
         conversation_list.append({
             'id': conv.id,
             'contact_name': display_contact_name,
-            'phone_number': format_phone_number_e164(conv.contact.phone_number),
+            'phone_number': format_phone_number_e164(conv.contact.phone_number) if conv.contact and conv.contact.phone_number else None,
             'last_message_time': last_message_timestamp_str,
             'last_message_body': last_message_body, # Add last message body for preview
             'unread_count': unread_count

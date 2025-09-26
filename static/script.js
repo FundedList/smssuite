@@ -157,14 +157,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 convItem.dataset.conversationId = conv.id;
                 
-                let unreadIndicator = '';
-                if (conv.unread_count > 0) {
-                    unreadIndicator = `<span class="unread-dot"></span> <span class="unread-count">${conv.unread_count}</span>`;
-                }
+                const timeDisplay = conv.last_message_time ? new Date(conv.last_message_time).toLocaleString() : '';
+                const unreadDot = conv.unread_count > 0 ? '<span class="unread-dot"></span>' : '';
+                const unreadCountDisplay = conv.unread_count > 0 ? `<span class="unread-count">${conv.unread_count}</span>` : '';
 
                 convItem.innerHTML = `
-                    <p class="contact-name">${conv.contact_name} ${unreadIndicator}</p>
-                    <p class="last-message">${conv.last_message}</p>
+                    <div class="conversation-info">
+                        <div class="contact-name">${conv.contact_name}</div>
+                        <div class="last-message-preview">${conv.last_message_body || 'No messages yet.'}</div>
+                    </div>
+                    <div class="conversation-meta">
+                        <div class="last-message-time">${timeDisplay}</div>
+                        ${unreadDot}
+                        ${unreadCountDisplay}
+                    </div>
                 `;
                 convItem.addEventListener('click', () => {
                     selectConversation(conv.id);
@@ -369,7 +375,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const searchTerm = this.value.toLowerCase();
         document.querySelectorAll('.conversation-item').forEach(item => {
             const contactName = item.querySelector('.contact-name').textContent.toLowerCase();
-            const lastMessage = item.querySelector('.last-message').textContent.toLowerCase();
+            const lastMessage = item.querySelector('.last-message-preview').textContent.toLowerCase();
             if (contactName.includes(searchTerm) || lastMessage.includes(searchTerm)) {
                 item.style.display = '';
             } else {

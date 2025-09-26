@@ -531,9 +531,21 @@ def get_conversations():
     conversation_list = []
     for conv in conversations:
         last_message_timestamp_str = None
-        if conv.last_activity_time:
-            # Ensure 'Z' is appended for UTC interpretation by frontend
-            last_message_timestamp_str = conv.last_activity_time.isoformat() + 'Z'
+        last_message_body = '' # Default to empty string for preview
+
+        # Fetch the very last message for the conversation to get its body and ensure last_activity_time accuracy
+        last_message_record = Message.query.filter_by(conversation_id=conv.id).order_by(Message.timestamp.desc()).first()
+        if last_message_record:
+            if conv.last_activity_time is None or last_message_record.timestamp > conv.last_activity_time:
+                # This can happen if last_activity_time was null or not updated during initial import
+                conv.last_activity_time = last_message_record.timestamp
+                db.session.add(conv) # Mark for update
+            last_message_timestamp_str = last_message_record.timestamp.isoformat() + 'Z'
+            last_message_body = last_message_record.body
+        # else: if no messages, last_message_timestamp_str and last_message_body remain defaults
+
+        # Ensure contact name is displayed as phone number if not available
+        display_contact_name = conv.contact.name if conv.contact and conv.contact.name else format_phone_number_e164(conv.contact.phone_number)
 
         unread_count = 0
         if conv.last_read_timestamp:
@@ -551,11 +563,13 @@ def get_conversations():
 
         conversation_list.append({
             'id': conv.id,
-            'contact_name': conv.contact.name if conv.contact else conv.phone_number,
+            'contact_name': display_contact_name,
             'phone_number': format_phone_number_e164(conv.contact.phone_number),
             'last_message_time': last_message_timestamp_str,
+            'last_message_body': last_message_body, # Add last message body for preview
             'unread_count': unread_count
         })
+    db.session.commit() # Commit any last_activity_time updates
     return jsonify(conversation_list)
 
 @app.route('/api/conversations/<int:conversation_id>/messages')

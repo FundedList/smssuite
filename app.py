@@ -524,15 +524,16 @@ def _get_contact_name_from_row_data(row_data, headers):
 @login_required
 def get_conversations():
     user_id = current_user.id
-    conversations = Conversation.query.filter_by(user_id=user_id).order_by(Conversation.last_activity_time.desc()).all()
+    # Order conversations by last_activity_time in descending order, with NULLs last
+    # This ensures that conversations with no activity time (e.g., brand new ones) appear at the end.
+    conversations = Conversation.query.filter_by(user_id=user_id).order_by(db.desc(Conversation.last_activity_time.isnot(None)), Conversation.last_activity_time.desc()).all()
     
     conversation_list = []
     for conv in conversations:
-        last_message = Message.query.filter_by(conversation_id=conv.id).order_by(Message.timestamp.desc()).first()
-        
-        display_name = conv.contact.name
-        if not display_name or display_name == "Unknown":
-            display_name = format_phone_number_e164(conv.contact.phone_number)
+        last_message_timestamp_str = None
+        if conv.last_activity_time:
+            # Ensure 'Z' is appended for UTC interpretation by frontend
+            last_message_timestamp_str = conv.last_activity_time.isoformat() + 'Z'
 
         unread_count = 0
         if conv.last_read_timestamp:
@@ -542,7 +543,7 @@ def get_conversations():
                 Message.timestamp > conv.last_read_timestamp
             ).count()
         else:
-            # If never read, count all incoming messages as unread
+            # If no last_read_timestamp, all incoming messages are unread
             unread_count = Message.query.filter(
                 Message.conversation_id == conv.id,
                 Message.sender == 'contact'
@@ -550,9 +551,9 @@ def get_conversations():
 
         conversation_list.append({
             'id': conv.id,
-            'contact_name': display_name,
-            'last_message': last_message.body if last_message else 'No messages yet.',
-            'last_message_time': (last_message.timestamp.isoformat() + 'Z') if last_message else None,
+            'contact_name': conv.contact.name if conv.contact else conv.phone_number,
+            'phone_number': format_phone_number_e164(conv.contact.phone_number),
+            'last_message_time': last_message_timestamp_str,
             'unread_count': unread_count
         })
     return jsonify(conversation_list)

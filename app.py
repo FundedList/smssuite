@@ -38,6 +38,7 @@ import tempfile # Added tempfile import
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.urandom(24) # Replace with a strong, random key in production
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL", 'sqlite:///smssuite.db') # Use DATABASE_URL for PostgreSQL on Render
+print(f"SQLALCHEMY_DATABASE_URI: {app.config['SQLALCHEMY_DATABASE_URI']}") # Diagnostic print
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
@@ -46,7 +47,6 @@ login_manager.init_app(app)
 login_manager.login_view = 'login_page' # Changed to point to the new login route
 socketio = SocketIO(app, cors_allowed_origins="*", logger=False, engineio_logger=False) # Initialize SocketIO with logging
 
-print(f"SQLALCHEMY_DATABASE_URI: {app.config['SQLALCHEMY_DATABASE_URI']}") # Diagnostic print
 # User model for Flask-Login
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -579,7 +579,6 @@ def get_conversations():
             'last_message_body': last_message_body, # Add last message body for preview
             'unread_count': unread_count
         })
-    db.session.commit() # Commit any last_activity_time updates
     return jsonify(conversation_list)
 
 @app.route('/api/conversations/<int:conversation_id>/messages')

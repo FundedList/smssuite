@@ -43,6 +43,13 @@
             <button id="import-twilio-history-btn">Import Twilio History</button>
             <p id="import-history-feedback" class="feedback-message"></p>
         </div>
+
+        <div class="settings-section">
+            <h2>Maintenance</h2>
+            <p>Recalculate conversation ordering from message history if the list looks out of order.</p>
+            <button id="recalc-last-activity-btn">Recalculate Conversation Order</button>
+            <p id="recalc-feedback" class="feedback-message"></p>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='settings.js') }}"></script>

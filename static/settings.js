@@ -12,6 +12,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const twilioFeedback = document.getElementById('twilio-feedback');
     const importTwilioHistoryBtn = document.getElementById('import-twilio-history-btn');
     const importHistoryFeedback = document.getElementById('import-history-feedback');
+    const recalcBtn = document.getElementById('recalc-last-activity-btn');
+    const recalcFeedback = document.getElementById('recalc-feedback');
 
     if (twilioSettingsForm) {
         twilioSettingsForm.addEventListener('submit', async function(event) {
@@ -78,6 +80,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Error importing Twilio history:', error);
                 importHistoryFeedback.style.color = 'red';
                 importHistoryFeedback.textContent = 'An unexpected error occurred during import.';
+            }
+        });
+    }
+
+    if (recalcBtn) {
+        recalcBtn.addEventListener('click', async function() {
+            recalcFeedback.textContent = 'Recalculating...';
+            recalcFeedback.style.color = 'black';
+            try {
+                const response = await fetch('/api/recalculate_last_activity', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                const result = await response.json();
+                if (response.ok) {
+                    recalcFeedback.style.color = 'green';
+                    recalcFeedback.textContent = result.message || 'Recalculated.';
+                } else {
+                    recalcFeedback.style.color = 'red';
+                    recalcFeedback.textContent = result.error || 'Failed to recalculate.';
+                }
+            } catch (e) {
+                console.error('Error recalculating last activity:', e);
+                recalcFeedback.style.color = 'red';
+                recalcFeedback.textContent = 'An unexpected error occurred.';
             }
         });
     }

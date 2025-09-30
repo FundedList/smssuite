@@ -549,9 +549,18 @@ def _get_contact_name_from_row_data(row_data, headers):
 def get_conversations():
     user_id = current_user.id
     # Order conversations by last_activity_time in descending order, with NULLs last
-    # This ensures that conversations with no activity time (e.g., brand new ones) appear at the end.
-    conversations = Conversation.query.filter_by(user_id=user_id).order_by(db.desc(Conversation.last_activity_time.isnot(None)), Conversation.last_activity_time.desc()).all()
+    conversations = Conversation.query.filter_by(user_id=user_id).order_by(Conversation.last_activity_time.desc().nullslast()).all()
     
+    print("[DEBUG] Conversations retrieved from DB (before sorting applies, raw order):")
+    for conv_raw in Conversation.query.filter_by(user_id=user_id).all():
+        print(f"[DEBUG]   ID: {conv_raw.id}, Last Activity: {conv_raw.last_activity_time}")
+    print("[DEBUG] ----------------------------------------")
+
+    print("[DEBUG] Conversations after SQLAlchemy sorting:")
+    for conv_sorted in conversations:
+        print(f"[DEBUG]   ID: {conv_sorted.id}, Last Activity: {conv_sorted.last_activity_time}")
+    print("[DEBUG] ----------------------------------------")
+
     conversation_list = []
     for conv in conversations:
         # Consolidate debug prints for brevity
@@ -591,9 +600,29 @@ def get_conversations():
             'phone_number': format_phone_number_e164(conv.contact.phone_number) if conv.contact and conv.contact.phone_number else None,
             'last_message_time': last_message_timestamp_str,
             'last_message_body': last_message_body, # Add last message body for preview
+            'last_activity_time': conv.last_activity_time.isoformat() + 'Z' if conv.last_activity_time else None,
             'unread_count': unread_count
         })
     return jsonify(conversation_list)
+
+@app.route('/api/recalculate_last_activity', methods=['POST'])
+@login_required
+def recalculate_last_activity():
+    # Rebuild last_activity_time from max message timestamp per conversation for current user
+    user_id = current_user.id
+    conversations = Conversation.query.filter_by(user_id=user_id).all()
+    updated = 0
+    for conv in conversations:
+        latest_msg = Message.query.filter_by(conversation_id=conv.id).order_by(Message.timestamp.desc()).first()
+        new_time = latest_msg.timestamp if latest_msg else None
+        if conv.last_activity_time != new_time:
+            conv.last_activity_time = new_time
+            db.session.add(conv)
+            updated += 1
+    db.session.commit()
+    # Notify UI to refresh
+    socketio.emit('conversation_update', {'user_id': user_id}, room=str(user_id))
+    return jsonify({'message': f'Recalculated last_activity_time for {updated} conversations.'})
 
 @app.route('/api/conversations/<int:conversation_id>/messages')
 @login_required

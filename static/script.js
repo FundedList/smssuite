@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 convItem.innerHTML = `
                     <div class="conversation-info">
-                        <div class="contact-name">${conv.contact_name}</div>
+                        <div class="contact-name">${conv.contact_name || conv.phone_number || 'Unknown'}</div>
                         <div class="last-message-preview">${conv.last_message_body || 'No messages yet.'}</div>
                     </div>
                     <div class="conversation-meta">

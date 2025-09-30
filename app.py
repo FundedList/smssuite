@@ -565,25 +565,21 @@ def get_conversations():
         # Fetch the very last message for the conversation to get its body and ensure last_activity_time accuracy
         last_message_record = Message.query.filter_by(conversation_id=conv.id).order_by(Message.timestamp.desc()).first()
         if last_message_record:
-            if conv.last_activity_time is None or last_message_record.timestamp > conv.last_activity_time:
-                # This can happen if last_activity_time was null or not updated during initial import
-                conv.last_activity_time = last_message_record.timestamp
-                db.session.add(conv) # Mark for update
             last_message_timestamp_str = last_message_record.timestamp.isoformat() + 'Z'
             last_message_body = last_message_record.body
-            print(f"  Last Message Record Timestamp: {last_message_record.timestamp}")
-            print(f"  Last Message Record Body: {last_message_record.body[:30]}...") # Truncate for log readability
         # else: if no messages, last_message_timestamp_str and last_message_body remain defaults
 
         # Ensure contact name is displayed as phone number if not available
-        display_contact_name = conv.contact.name if conv.contact and conv.contact.name else (format_phone_number_e164(conv.contact.phone_number) if conv.contact and conv.contact.phone_number else 'Unknown Contact/Phone')
+        # Treat 'Unknown' as an empty name for fallback purposes.
+        actual_contact_name = conv.contact.name if conv.contact and conv.contact.name != 'Unknown' else None
+        display_contact_name = actual_contact_name if actual_contact_name else (format_phone_number_e164(conv.contact.phone_number) if conv.contact and conv.contact.phone_number else 'Unknown Contact/Phone')
         print(f"  Display Contact Name (processed): {display_contact_name}")
 
         unread_count = 0
         if conv.last_read_timestamp:
             unread_count = Message.query.filter(
                 Message.conversation_id == conv.id,
-                Message.sender == 'contact', # Only count incoming messages as unread
+                Message.sender == 'contact',
                 Message.timestamp > conv.last_read_timestamp
             ).count()
         else:

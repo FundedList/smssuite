@@ -417,20 +417,30 @@ document.addEventListener('DOMContentLoaded', function() {
             const headers = window.currentSheetHeaders || [];
             const rows = window.currentSheetRows || [];
 
-            // Try common header variants for phone and name
-            const phoneHeaderCandidates = ['Phone', 'phone', 'Phone Number', 'phone_number', 'Mobile', 'mobile'];
-            const nameHeaderCandidates = ['Name', 'Full Name', 'name', 'First Name', 'FirstName'];
+            // Build a normalized header index for robust matching
+            const norm = s => String(s || '').toLowerCase().replace(/\s+|_/g, '');
+            const headerIndexByNorm = {};
+            headers.forEach((h, i) => { headerIndexByNorm[norm(h)] = i; });
 
-            function findHeader(candidates) {
+            function findHeaderNormalized(candidates) {
                 for (const c of candidates) {
-                    const idx = headers.indexOf(c);
-                    if (idx !== -1) return idx;
+                    const key = norm(c);
+                    if (headerIndexByNorm.hasOwnProperty(key)) return headerIndexByNorm[key];
                 }
                 return -1;
             }
 
-            const phoneIdx = findHeader(phoneHeaderCandidates);
-            const nameIdx = findHeader(nameHeaderCandidates);
+            // Candidate sets (normalized):
+            const phoneHeaderCandidates = ['Phone', 'Phone Number', 'phone_number', 'Mobile', 'Mobile Number', 'Cell', 'Cell Phone'];
+            const fullNameCandidates   = ['Full Name', 'full_name', 'FullName', 'Contact Name', 'contact_name', 'Name'];
+            const firstNameCandidates  = ['First Name', 'FirstName', 'first_name', 'Firstname', 'First'];
+            const lastNameCandidates   = ['Last Name', 'LastName', 'last_name', 'Lastname', 'Last'];
+
+            const phoneIdx = findHeaderNormalized(phoneHeaderCandidates);
+            const fullIdx  = findHeaderNormalized(fullNameCandidates);
+            const firstIdx = findHeaderNormalized(firstNameCandidates);
+            const lastIdx  = findHeaderNormalized(lastNameCandidates);
+
             if (phoneIdx === -1) {
                 applyNamesFromSheetFeedback.style.color = 'red';
                 applyNamesFromSheetFeedback.textContent = 'Could not find a phone column in the sheet.';
@@ -440,7 +450,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const contactsPayload = [];
             for (const row of rows) {
                 const phone = row[phoneIdx] || '';
-                const name = nameIdx !== -1 ? (row[nameIdx] || '') : '';
+                let name = '';
+                if (fullIdx !== -1) {
+                    name = row[fullIdx] || '';
+                } else if (firstIdx !== -1 || lastIdx !== -1) {
+                    const first = firstIdx !== -1 ? (row[firstIdx] || '') : '';
+                    const last  = lastIdx  !== -1 ? (row[lastIdx]  || '') : '';
+                    name = `${first} ${last}`.trim();
+                }
                 if (phone) {
                     contactsPayload.push({ phone_number: String(phone), name: String(name) });
                 }

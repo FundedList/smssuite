@@ -554,27 +554,22 @@ def get_conversations():
     
     conversation_list = []
     for conv in conversations:
-        print(f"Processing Conversation ID: {conv.id}")
-        print(f"  Contact Name (raw): {conv.contact.name if conv.contact else 'No Contact Object'}")
-        print(f"  Contact Phone (raw): {conv.contact.phone_number if conv.contact else 'No Contact Object'}")
-        print(f"  Last Activity Time (raw): {conv.last_activity_time}")
+        # Consolidate debug prints for brevity
+        display_contact_name = conv.contact.name if conv.contact and conv.contact.name != 'Unknown' else None
+        display_contact_name = display_contact_name if display_contact_name else (format_phone_number_e164(conv.contact.phone_number) if conv.contact and conv.contact.phone_number else 'Unknown Contact/Phone')
+        
+        print(f"[DEBUG] Conv ID: {conv.id} | Contact: '{display_contact_name}' | Phone (raw): '{conv.contact.phone_number if conv.contact else 'N/A'}' | Last Activity: {conv.last_activity_time}")
 
         last_message_timestamp_str = None
         last_message_body = '' # Default to empty string for preview
 
-        # Fetch the very last message for the conversation to get its body and ensure last_activity_time accuracy
+        # Fetch the very last message for the conversation to get its body
         last_message_record = Message.query.filter_by(conversation_id=conv.id).order_by(Message.timestamp.desc()).first()
         if last_message_record:
             last_message_timestamp_str = last_message_record.timestamp.isoformat() + 'Z'
             last_message_body = last_message_record.body
-        # else: if no messages, last_message_timestamp_str and last_message_body remain defaults
 
-        # Ensure contact name is displayed as phone number if not available
-        # Treat 'Unknown' as an empty name for fallback purposes.
-        actual_contact_name = conv.contact.name if conv.contact and conv.contact.name != 'Unknown' else None
-        display_contact_name = actual_contact_name if actual_contact_name else (format_phone_number_e164(conv.contact.phone_number) if conv.contact and conv.contact.phone_number else 'Unknown Contact/Phone')
-        print(f"  Display Contact Name (processed): {display_contact_name}")
-
+        # Unread count logic remains the same
         unread_count = 0
         if conv.last_read_timestamp:
             unread_count = Message.query.filter(
@@ -583,7 +578,6 @@ def get_conversations():
                 Message.timestamp > conv.last_read_timestamp
             ).count()
         else:
-            # If no last_read_timestamp, all incoming messages are unread
             unread_count = Message.query.filter(
                 Message.conversation_id == conv.id,
                 Message.sender == 'contact'

@@ -34,6 +34,7 @@ import httpx # Added httpx import
 
 from twilio.twiml.messaging_response import MessagingResponse # Import for Twilio webhook
 import tempfile # Added tempfile import
+from flask import Response # Added Response import for TwiML
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.urandom(24) # Replace with a strong, random key in production
@@ -134,19 +135,42 @@ def format_phone_number_e164(phone_number, default_region="US"):
         pass # Fallback to original if parsing fails
     return phone_number # Return original if cannot format
 
-def get_or_create_contact_and_conversation(phone_number, user_id, contact_name="Unknown"):
-    formatted_phone_number = format_phone_number_e164(phone_number)
-    contact = Contact.query.filter_by(user_id=user_id, phone_number=formatted_phone_number).first()
+def get_or_create_contact_and_conversation(raw_phone_number, user_id, contact_name_hint=None):
+    print(f"[DEBUG] get_or_create_contact_and_conversation called for raw_phone_number: {raw_phone_number}, user_id: {user_id}, contact_name_hint: {contact_name_hint}")
+    phone_number_e164 = format_phone_number_e164(raw_phone_number)
+    print(f"[DEBUG] Phone number formatted to E.164: {phone_number_e164}")
+
+    if not phone_number_e164: # Should not happen if format_phone_number_e164 is robust
+        print(f"[ERROR] Failed to format phone number to E.164: {raw_phone_number}")
+        return None, None # Or raise an error, depending on desired behavior
+
+    contact = Contact.query.filter_by(user_id=user_id, phone_number=phone_number_e164).first()
     if not contact:
-        contact = Contact(user_id=user_id, phone_number=formatted_phone_number, name=contact_name)
+        # Only use the hint if it's provided and not empty
+        name_to_set = contact_name_hint if contact_name_hint else ''
+        contact = Contact(user_id=user_id, phone_number=phone_number_e164, name=name_to_set)
         db.session.add(contact)
-        db.session.commit()
+        db.session.flush() # Flush to get contact.id before committing
+        print(f"[DEBUG] Created new Contact: ID {contact.id}, Name '{contact.name}', Phone '{contact.phone_number}'")
+    else:
+        # If contact exists, but name is empty, try to update with hint
+        if not contact.name and contact_name_hint:
+            contact.name = contact_name_hint
+            db.session.add(contact) # Mark for update
+            print(f"[DEBUG] Updated existing Contact {contact.id} with name hint: '{contact.name}'")
+        print(f"[DEBUG] Found existing Contact: ID {contact.id}, Name '{contact.name}', Phone '{contact.phone_number}'")
 
     conversation = Conversation.query.filter_by(user_id=user_id, contact_id=contact.id).first()
     if not conversation:
         conversation = Conversation(user_id=user_id, contact_id=contact.id)
         db.session.add(conversation)
-        db.session.commit()
+        db.session.flush() # Flush to get conversation.id before committing
+        print(f"[DEBUG] Created new Conversation: ID {conversation.id}, Contact ID {conversation.contact_id}")
+    else:
+        print(f"[DEBUG] Found existing Conversation: ID {conversation.id}, Contact ID {conversation.contact_id}")
+    
+    db.session.commit() # Commit contact and conversation creation/updates here
+
     return contact, conversation
 
 def send_sms(to_number, message_body, conversation_id=None):
@@ -664,68 +688,122 @@ def send_message_in_conversation(conversation_id):
 
 @app.route('/twilio_webhook', methods=['POST'])
 def twilio_webhook():
+    print("[DEBUG] Twilio Webhook received a message.")
     # Twilio sends data as form-encoded, not JSON
+    message_sid = request.form.get('MessageSid')
     from_number = request.form.get('From')
-    to_number = request.form.get('To') # Our Twilio number
+    to_number = request.form.get('To')
     message_body = request.form.get('Body')
 
-    if not from_number or not message_body:
-        return 'Invalid Twilio request', 400
+    print(f"[DEBUG] Incoming Twilio Message SID: {message_sid}, From: {from_number}, To: {to_number}, Body: {message_body}")
 
+    # Normalize numbers to E.164
     formatted_from_number = format_phone_number_e164(from_number)
     formatted_to_number = format_phone_number_e164(to_number)
 
     target_user = None
     conversation = None
 
-    # Priority 1: Find an existing conversation for this contact number
-    # This ensures replies go to the user who initiated the conversation
-    conversation = Conversation.query.join(Contact).filter(
-        Contact.phone_number == formatted_from_number
-    ).order_by(Conversation.start_time.desc()).first()
-
-    if conversation:
-        target_user = User.query.get(conversation.user_id)
-    else:
-        # Priority 2: If no conversation, find a user whose Twilio number matches the `to_number`
-        # This routes unsolicited messages to the user who owns the Twilio number
-        print(f"No existing conversation found for {formatted_from_number}. Looking for user with Twilio number: {formatted_to_number}")
-        target_user = User.query.filter_by(twilio_phone_number=formatted_to_number).first()
-
-    if not target_user:
-        # Fallback: If still no target user (e.g., Twilio number not configured or unroutable)
-        print("No target user found for incoming message. Falling back to ADMIN_GOOGLE_ID if configured.")
-        target_user = User.query.filter_by(google_id=os.environ.get("ADMIN_GOOGLE_ID")).first()
-
-    if not target_user:
-        print("Error: No target user identified for incoming message. Message will not be processed.")
-        return '<Response/>', 200 # Respond to Twilio gracefully if no user can be found
-
-    # Now that we have a target_user, get or create the contact and conversation for them
-    # The conversation might have been found above, or it needs to be created for unsolicited messages
-    contact, conversation = get_or_create_contact_and_conversation(formatted_from_number, target_user.id)
-
-    incoming_message = Message(
-        conversation_id=conversation.id,
-        sender='contact',
-        body=message_body
-    )
-    db.session.add(incoming_message)
-    conversation.last_activity_time = datetime.utcnow() # Update last activity time
-    db.session.commit()
+    # Priority 1: Find an existing conversation involving the incoming numbers and any user.
+    # This is important for replies to existing conversations.
+    # Look for a conversation where `to_number` is the user's twilio number and `from_number` is the contact's.
+    # Or where `from_number` is the user's twilio number and `to_number` is the contact's.
     
-    # Emit SocketIO event for real-time update
-    socketio.emit('new_message', {
-        'conversation_id': conversation.id,
-        'sender': 'contact',
-        'body': message_body,
-        'timestamp': datetime.utcnow().isoformat() + 'Z' # Ensure Z for UTC
-    }, room=str(conversation.id))
-    socketio.emit('conversation_update', {'user_id': target_user.id}, room=str(target_user.id))
+    # Find conversation by checking if `to_number` (our Twilio number) is registered to any user
+    # and if that user has a contact with `from_number`.
+    print(f"[DEBUG] Searching for user whose Twilio number is {formatted_to_number}")
+    user_with_twilio_number = User.query.filter_by(twilio_phone_number=formatted_to_number).first()
 
-    resp = MessagingResponse()
-    # You can optionally send a reply here, e.g., resp.message("Thanks for your message!")
-    return str(resp)
+    if user_with_twilio_number:
+        print(f"[DEBUG] Found user {user_with_twilio_number.id} ({user_with_twilio_number.email}) with matching Twilio number.")
+        contact = Contact.query.filter_by(user_id=user_with_twilio_number.id, phone_number=formatted_from_number).first()
+        if contact:
+            print(f"[DEBUG] Found contact {contact.id} for user {user_with_twilio_number.id} with phone number {formatted_from_number}.")
+            conversation = Conversation.query.filter_by(user_id=user_with_twilio_number.id, contact_id=contact.id).first()
+            if conversation:
+                target_user = user_with_twilio_number
+                print(f"[DEBUG] Found existing conversation {conversation.id} for user {target_user.id}.")
+            else:
+                print("[DEBUG] No existing conversation found for this user and contact. Creating new conversation.")
+                # If no conversation exists, create one implicitly
+                target_user = user_with_twilio_number
+                contact, conversation = get_or_create_contact_and_conversation(formatted_from_number, target_user.id)
+                # If creation fails, log and exit
+                if not conversation:
+                    print(f"[ERROR] Failed to get or create conversation for user {target_user.id} and phone {formatted_from_number}")
+                    return Response(str(MessagingResponse()), mimetype='text/xml')
+        else:
+            print(f"[DEBUG] No existing contact found for user {user_with_twilio_number.id} with phone number {formatted_from_number}. Creating new contact and conversation.")
+            # If no contact, create one implicitly and then the conversation
+            target_user = user_with_twilio_number
+            contact, conversation = get_or_create_contact_and_conversation(formatted_from_number, target_user.id)
+            if not conversation:
+                print(f"[ERROR] Failed to get or create conversation for user {target_user.id} and phone {formatted_from_number}")
+                return Response(str(MessagingResponse()), mimetype='text/xml')
+
+    if not target_user or not conversation:
+        print("[DEBUG] No matching user/conversation found via Twilio number. Attempting to route to ADMIN_GOOGLE_ID.")
+        # Fallback 1.1: If no specific user's Twilio number matches `to_number`, check ADMIN_GOOGLE_ID
+        if os.environ.get("ADMIN_GOOGLE_ID"):
+            admin_user = User.query.filter_by(google_id=os.environ.get("ADMIN_GOOGLE_ID")).first()
+            if admin_user:
+                print(f"[DEBUG] Found ADMIN_GOOGLE_ID user: {admin_user.id}")
+                # Get or create contact and conversation for admin user
+                contact, conversation = get_or_create_contact_and_conversation(formatted_from_number, admin_user.id)
+                if conversation:
+                    target_user = admin_user
+                    print(f"[DEBUG] Routed to ADMIN_GOOGLE_ID user {target_user.id} conversation {conversation.id}.")
+                else:
+                    print(f"[ERROR] Failed to get or create conversation for admin user {admin_user.id} and phone {formatted_from_number}")
+            else:
+                print("[ERROR] ADMIN_GOOGLE_ID environment variable set, but no matching user found.")
+        else:
+            print("[ERROR] No matching user/conversation found and ADMIN_GOOGLE_ID is not set.")
+            return Response(str(MessagingResponse()), mimetype='text/xml') # Respond to Twilio even if we can't process
+
+    if not target_user or not conversation:
+        print("[ERROR] After all attempts, target_user or conversation is still None. Cannot process message.")
+        return Response(str(MessagingResponse()), mimetype='text/xml')
+
+    try:
+        new_message = Message(
+            conversation_id=conversation.id,
+            sender='contact',
+            body=message_body,
+            timestamp=datetime.utcnow()
+        )
+        db.session.add(new_message)
+        
+        # Update conversation's last_activity_time to the current message's timestamp
+        conversation.last_activity_time = new_message.timestamp
+        db.session.add(conversation) # Mark conversation for update
+        
+        db.session.commit() # Commit new message and conversation update
+        print(f"[DEBUG] Committed new message {new_message.id} and updated conversation {conversation.id} last_activity_time to {conversation.last_activity_time}")
+
+        # Emit real-time updates
+        # Emit to the specific conversation room for message display
+        socketio.emit('new_message', {
+            'conversation_id': conversation.id,
+            'sender': new_message.sender,
+            'body': new_message.body,
+            'timestamp': new_message.timestamp.isoformat() + 'Z'
+        }, room=str(conversation.id))
+        print(f"[DEBUG] Emitted 'new_message' to room {conversation.id}")
+
+        # Emit a user-specific update to refresh the conversation list in the left pane
+        socketio.emit('conversation_update', {'user_id': target_user.id}, room=str(target_user.id))
+        print(f"[DEBUG] Emitted 'conversation_update' to user room {target_user.id}")
+
+        resp = MessagingResponse()
+        return Response(str(resp), mimetype='text/xml')
+    except Exception as e:
+        db.session.rollback()
+        print(f"[ERROR] Error processing Twilio webhook: {e}")
+        # It's crucial to return a valid TwiML response even on error
+        resp = MessagingResponse()
+        resp.message("An error occurred while processing your message.") # Or a more generic error
+        return Response(str(resp), mimetype='text/xml')
 
 @socketio.on('connect')
 def handle_connect():

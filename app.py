@@ -639,7 +639,16 @@ def get_conversation_messages(conversation_id):
             'body': msg.body,
             'timestamp': msg.timestamp.isoformat() + 'Z' # Ensure Z for UTC
         })
-    return jsonify({'conversation_id': conversation.id, 'messages': message_list})
+
+    contact_name = conversation.contact.name if conversation.contact and conversation.contact.name else format_phone_number_e164(conversation.contact.phone_number) if conversation.contact else None
+    phone_number = format_phone_number_e164(conversation.contact.phone_number) if conversation.contact and conversation.contact.phone_number else None
+
+    return jsonify({
+        'conversation_id': conversation.id,
+        'contact_name': contact_name,
+        'phone_number': phone_number,
+        'messages': message_list
+    })
 
 @app.route('/api/conversations/<int:conversation_id>/mark_read', methods=['POST'])
 @login_required
@@ -1060,3 +1069,50 @@ def import_twilio_history_for_user(user):
         db.session.rollback()
         print(f"Error importing Twilio history for user {user.id}: {e}")
         return False, f"Error importing Twilio history: {e}"
+
+@app.route('/api/apply_sheet_contacts', methods=['POST'])
+@login_required
+def apply_sheet_contacts():
+    try:
+        payload = request.get_json(force=True) or {}
+        contacts = payload.get('contacts', [])
+        if not isinstance(contacts, list) or not contacts:
+            return jsonify({'error': 'No contacts provided.'}), 400
+
+        updated = 0
+        created = 0
+        skipped = 0
+
+        for item in contacts:
+            raw_phone = (item.get('phone_number') or '').strip()
+            name = (item.get('name') or '').strip()
+            if not raw_phone:
+                skipped += 1
+                continue
+
+            phone_e164 = format_phone_number_e164(raw_phone)
+            if not phone_e164:
+                skipped += 1
+                continue
+
+            contact = Contact.query.filter_by(user_id=current_user.id, phone_number=phone_e164).first()
+            if contact:
+                if name and contact.name != name:
+                    contact.name = name
+                    db.session.add(contact)
+                    updated += 1
+                else:
+                    skipped += 1
+            else:
+                # Create a contact so future conversations have a name
+                contact = Contact(user_id=current_user.id, phone_number=phone_e164, name=name)
+                db.session.add(contact)
+                created += 1
+
+        db.session.commit()
+        # Refresh conversation list for this user
+        socketio.emit('conversation_update', {'user_id': current_user.id}, room=str(current_user.id))
+        return jsonify({'message': f'Applied names. updated={updated}, created={created}, skipped={skipped}'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Failed to apply contacts: {e}'}), 500

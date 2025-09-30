@@ -27,6 +27,10 @@ document.addEventListener('DOMContentLoaded', function() {
     const conversationDisplay = document.querySelector('.conversation-display');
     const newMessageInput = document.getElementById('new-message');
     const sendMessageBtn = document.getElementById('send-message-btn');
+    const conversationHeader = document.getElementById('conversation-header');
+    const conversationSubheader = document.getElementById('conversation-subheader');
+    const applyNamesFromSheetBtn = document.getElementById('apply-names-from-sheet-btn');
+    const applyNamesFromSheetFeedback = document.getElementById('apply-names-from-sheet-feedback');
 
     let currentConversationId = null;
     let currentConversationRoom = null; // To track the current conversation room
@@ -130,8 +134,9 @@ document.addEventListener('DOMContentLoaded', function() {
             html += '</tbody></table>';
             sheetDataPreview.innerHTML = html;
 
-            // Store headers globally or make them accessible for templating
+            // Store headers and rows globally for later use
             window.currentSheetHeaders = data.headers;
+            window.currentSheetRows = data.data;
             console.log('Available headers for templating:', window.currentSheetHeaders);
 
         } catch (error) {
@@ -193,6 +198,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             const data = await response.json();
+
+            // Update conversation header
+            if (conversationHeader && conversationSubheader) {
+                const displayName = data.contact_name || data.phone_number || 'Conversation';
+                conversationHeader.textContent = displayName;
+                conversationSubheader.textContent = data.phone_number ? `${data.phone_number}` : '';
+            }
+
             conversationDisplay.innerHTML = ''; 
             data.messages.forEach(msg => {
                 const messageDiv = document.createElement('div');
@@ -383,6 +396,83 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    if (applyNamesFromSheetBtn) {
+        applyNamesFromSheetBtn.addEventListener('click', async function() {
+            applyNamesFromSheetFeedback.textContent = 'Applying names from sheet...';
+            applyNamesFromSheetFeedback.style.color = 'black';
+
+            const sheetId = googleSheetSelect ? googleSheetSelect.value : '';
+            if (!sheetId) {
+                applyNamesFromSheetFeedback.style.color = 'red';
+                applyNamesFromSheetFeedback.textContent = 'Please select a Google Sheet first.';
+                return;
+            }
+
+            // Ensure we have current sheet data loaded; if not, fetch it
+            if (!window.currentSheetHeaders || !window.currentSheetRows) {
+                await fetchSheetData(sheetId);
+            }
+
+            const headers = window.currentSheetHeaders || [];
+            const rows = window.currentSheetRows || [];
+
+            // Try common header variants for phone and name
+            const phoneHeaderCandidates = ['Phone', 'phone', 'Phone Number', 'phone_number', 'Mobile', 'mobile'];
+            const nameHeaderCandidates = ['Name', 'Full Name', 'name', 'First Name', 'FirstName'];
+
+            function findHeader(candidates) {
+                for (const c of candidates) {
+                    const idx = headers.indexOf(c);
+                    if (idx !== -1) return idx;
+                }
+                return -1;
+            }
+
+            const phoneIdx = findHeader(phoneHeaderCandidates);
+            const nameIdx = findHeader(nameHeaderCandidates);
+            if (phoneIdx === -1) {
+                applyNamesFromSheetFeedback.style.color = 'red';
+                applyNamesFromSheetFeedback.textContent = 'Could not find a phone column in the sheet.';
+                return;
+            }
+
+            const contactsPayload = [];
+            for (const row of rows) {
+                const phone = row[phoneIdx] || '';
+                const name = nameIdx !== -1 ? (row[nameIdx] || '') : '';
+                if (phone) {
+                    contactsPayload.push({ phone_number: String(phone), name: String(name) });
+                }
+            }
+
+            if (contactsPayload.length === 0) {
+                applyNamesFromSheetFeedback.style.color = 'red';
+                applyNamesFromSheetFeedback.textContent = 'No phone numbers found in the sheet.';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/apply_sheet_contacts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contacts: contactsPayload })
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    applyNamesFromSheetFeedback.style.color = 'green';
+                    applyNamesFromSheetFeedback.textContent = result.message || 'Applied names.';
+                } else {
+                    applyNamesFromSheetFeedback.style.color = 'red';
+                    applyNamesFromSheetFeedback.textContent = result.error || 'Failed to apply names.';
+                }
+            } catch (e) {
+                console.error('Error applying names from sheet:', e);
+                applyNamesFromSheetFeedback.style.color = 'red';
+                applyNamesFromSheetFeedback.textContent = 'An unexpected error occurred.';
+            }
+        });
+    }
 
     // Initial fetches when the page loads
     fetchGoogleSheets();

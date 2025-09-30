@@ -45,6 +45,16 @@
         </div>
 
         <div class="settings-section">
+            <h2>Apply Names From Sheet</h2>
+            <p>Paste JSON array like: [{"name":"Alice","phone_number":"(555) 123-4567"}, ...] or use a minimal CSV (phone,name).</p>
+            <textarea id="sheet-contacts-input" rows="6" placeholder='[{"name":"Alice","phone_number":"(555) 123-4567"}]'></textarea>
+            <div style="margin-top:8px;">
+                <button id="apply-sheet-contacts-btn">Apply Names</button>
+            </div>
+            <p id="apply-sheet-contacts-feedback" class="feedback-message"></p>
+        </div>
+
+        <div class="settings-section">
             <h2>Maintenance</h2>
             <p>Recalculate conversation ordering from message history if the list looks out of order.</p>
             <button id="recalc-last-activity-btn">Recalculate Conversation Order</button>

@@ -38,7 +38,8 @@
 
         <div class="middle-pane">
             <div class="pane-header">
-                <h2>Selected Conversation</h2>
+                <h2 id="conversation-header">Selected Conversation</h2>
+                <div id="conversation-subheader" class="conversation-subheader"></div>
             </div>
             <div class="conversation-display">
                 <!-- Messages will be loaded here by JavaScript -->
@@ -67,6 +68,8 @@
                 <select id="googleSheetSelect">
                     <option value="">Select a Google Sheet</option>
                 </select>
+                <button id="apply-names-from-sheet-btn" type="button" style="margin-top:8px;">Apply Names From This Sheet</button>
+                <p id="apply-names-from-sheet-feedback" class="feedback-message"></p>
             </div>
             <div id="sheetPreview" class="sheet-preview">
                 <h3>Sheet Preview</h3>
